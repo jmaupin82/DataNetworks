@@ -41,8 +41,7 @@ struct custom_ip_header {
     uint8_t version:4;
     uint8_t ihl:4;
     uint8_t type:8;
-    uint16_t length:16;
-    uint8_t tot_len:8;
+    uint16_t tot_len:16;
     uint16_t identification:16;
     uint16_t fragmentation:16;
     uint8_t ttl:8;
@@ -54,44 +53,44 @@ struct custom_ip_header {
     uint8_t padding:8;
 };
 
-struct custom_ip_header readIPInfo(FILE *fp)
+struct ip readIPInfo(FILE *fp)
 {
     uint8_t buffer[3000];
     fread(buffer, 24, 1, fp);
     // cast all of the buffer info over the ip header struct
     // this performs
-    struct custom_ip_header *result = (struct custom_ip_header*) buffer;
-//    fread(result.version, 4, 1, fp);
-//    fread(result.ihl, 4, 1, fp);
-//    fread(result.type, 8, 1, fp);
-//    fread(result.tot_len, 16, 1, fp);
+    struct ip *ip_header = (struct ip*) buffer;
+    //struct custom_ip_header *result = (struct custom_ip_header*) buffer;
     
-    return *result;
+    return *ip_header;
 }
 
-void printIPInfo(struct custom_ip_header header)
+void printIPInfo(struct ip header)
 {
     printf("IP:\t----- IP Header -----\n");
     printf("IP:\t \n");
-    printf("IP:\t Version = %u\n", header.version);
-    printf("IP:\t Header Length = %u\n",header.ihl );
-    printf("IP:\t Type of Service = 0x%02x \n", header.type);
+    printf("IP:\t Version = %u\n", header.ip_v);
+    printf("IP:\t Header Length = %u\n",header.ip_hl );
+    printf("IP:\t Type of Service = 0x%02x \n", header.ip_tos);
     printf("IP:\t\t xxx. .... = 0 (precedence)\n");
     printf("IP:\t\t ...0 .... = normal delay\n");
     printf("IP:\t\t .... 0... = normal throughput\n");
     printf("IP:\t\t .... .0.. = normal reliability\n");
-    printf("IP:\t Total Length = %u bytes\n", header.tot_len);
-    printf("IP:\t Identification = %u\n", header.identification);
-    printf("IP:\t Flags   \n");
+    printf("IP:\t Total Length = %u bytes\n", header.ip_len);
+    printf("IP:\t Identification = %u\n", header.ip_id);
+    printf("IP:\t Flags .%d%d. ....\n", header.ip_off & 0x2000, header.ip_off &0x4000);
     printf("IP:\t\t .1.. .... = do not fragment\n");
     printf("IP:\t\t ..0. .... = last fragment\n");
-    printf("IP:\t Fragment Offset = %u \n", header.fragmentation);
-    printf("IP:\t Time to live = %u seconds/hops\n", header.ttl);
-    printf("IP:\t Protocol  = %u \n", header.protocol);
-    printf("IP:\t Header Checksum = %04x \n", header.header_checksum);
-    printf("IP:\t Source Address = %u\n", header.source);
-    printf("IP:\t Destination Address = %u\n", header.destination);
+    printf("IP:\t Fragment Offset = %u \n", header.ip_off);
+    printf("IP:\t Time to live = %u seconds/hops\n", header.ip_ttl);
+    printf("IP:\t Protocol  = %u \n", header.ip_p);
+    printf("IP:\t Header Checksum = %04x \n", header.ip_sum);
+    struct in_addr source = header.ip_src;
+    struct in_addr dest = header.ip_dst;
+    printf("IP:\t Source Address = %u\n", source.s_addr);
+    printf("IP:\t Destination Address = %u\n", dest.s_addr);
     printf("IP:\t No options\n");
+    printf("IP:\t\n\n");
     
 }
 
@@ -104,13 +103,14 @@ void dataDump(char* filename)
     //read all of the data into the buffer
     fread(buffer, file_len, 1, fp);
     for(int i = 0; i < file_len; ++i){
+        //printf("hello");
         if (i % 2 == 1) {
-            printf("%u\t", buffer[i]);
+            printf("%x\t", buffer[i]);
 
         } else if( i % 10 == 9){
-            printf("%u\n", buffer[i]);
+            printf("%x\n", buffer[i]);
         } else {
-            printf("%u", buffer[i]);
+            printf("%x", buffer[i]);
 
         }
     }
@@ -118,6 +118,31 @@ void dataDump(char* filename)
     
     //loop over buffer printing out some interesting information
 }
+
+void readAllIPData(FILE *fp, unsigned long frame_len)
+{
+    //get the total length of the framefrom frame_len
+    unsigned long byte_count = 0;
+    byte_count = 32; //start past the ethernet header.
+    //loop untill we get very close to the end of the file
+    do{
+        //call a function to also read the IP packet info in the MAC information
+        struct ip ip_header = readIPInfo(fp);
+        //move forward the byte count by how far we advanced
+        byte_count = byte_count + 24;
+        //also skip over any of the extra data
+        long extra = ip_header.ip_len - 24;
+        //also add in the seperator
+        
+        if(extra > 0){
+            char buffer[1000];
+            fread(buffer, extra, 1, fp);
+        }
+        printIPInfo(ip_header);
+    
+    } while(byte_count < frame_len);
+}
+
 /*
     Method for reading the Ethernet Frame. 
     Parameters:
@@ -166,11 +191,8 @@ void readEthernetInfo(char* filename)
     
     
     // do some sort of loop to read in all of the IP packets
-    
-    //call a function to also read the IP packet info in the MAC information
-    struct custom_ip_header ip = readIPInfo(fp);
+    readAllIPData(fp, bytelen);
     //print the ip info
-    printIPInfo(ip);
     //close the file
     fclose(fp);
 }
